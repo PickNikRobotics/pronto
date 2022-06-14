@@ -1,10 +1,16 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.10.2)
 project(pronto_quadruped)
 
-set(CMAKE_CXX_STANDARD 14)
-add_compile_options(-Wall)
-
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(DEFAULT_BUILD "Release")
+
+# TODO: Enable compiler warnings
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
    message(STATUS "Setting build type to '${DEFAULT_BUILD}' as none was specified.")
    set(CMAKE_BUILD_TYPE ${DEFAULT_BUILD} CACHE STRING "Choose the type of build." FORCE)
@@ -43,21 +49,24 @@ endif()
 # Including the directory containing the sources
 include_directories(include)
 
-find_package(catkin REQUIRED COMPONENTS pronto_quadruped_commons
-                                        pronto_core
-                                        pronto_utils)
-include_directories(${catkin_INCLUDE_DIRS})
+find_package(ament_cmake REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(pronto_quadruped_commons REQUIRED)
+find_package(pronto_core REQUIRED)
+find_package(pronto_utils REQUIRED)
 
-find_package(Eigen3)
-include_directories(${EIGEN3_INCLUDE_DIRS})
+# Finds Boost Components
+include(ConfigExtras.cmake)
 
-find_package(Boost REQUIRED COMPONENTS filesystem)
+set(THIS_PACKAGE_INCLUDE_DEPENDS
+  Eigen3
+  pronto_quadruped_commons
+  pronto_core
+  pronto_utils
+  Boost
+)
 
-catkin_package(LIBRARIES ${PROJECT_NAME} 
-               INCLUDE_DIRS include
-               CATKIN_DEPENDS pronto_quadruped_commons
-                              pronto_utils
-               DEPENDS EIGEN3 Boost)
+include_directories(include ${EIGEN3_INCLUDE_DIRS})
 
 add_library(${PROJECT_NAME} SHARED src/LegOdometer.cpp
                                    src/DynamicStanceEstimator.cpp
@@ -68,13 +77,46 @@ add_library(${PROJECT_NAME} SHARED src/LegOdometer.cpp
                                    src/DataLogger.cpp
                                    src/ImuBiasLock.cpp)
 
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES})
+ament_target_dependencies(
+  ${PROJECT_NAME}
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
 
-install(DIRECTORY include/${PROJECT_NAME}/
-        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+target_include_directories(${PROJECT_NAME} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(${PROJECT_NAME} Eigen3::Eigen ${Boost_LIBRARIES})
 
-install(TARGETS ${PROJECT_NAME}
-        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ros_testing REQUIRED)
 
+  # These don't pass yet, disable them for now
+  set(ament_cmake_copyright_FOUND TRUE)
+  set(ament_cmake_cppcheck_FOUND TRUE)
+  set(ament_cmake_cpplint_FOUND TRUE)
+  set(ament_cmake_flake8_FOUND TRUE)
+  set(ament_cmake_uncrustify_FOUND TRUE)
+
+endif()
+
+install(
+  TARGETS ${PROJECT_NAME}
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
+install(DIRECTORY include/
+        DESTINATION include
+)
+
+ament_export_include_directories(include)
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+
+ament_package()

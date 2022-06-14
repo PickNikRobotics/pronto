@@ -291,7 +291,7 @@ Eigen::Vector3d inline  skew_simToVec(const Eigen::Matrix3d& R) {
 inline void computeQR(const MatrixXR & A,
                       MatrixXR & Q,
                       MatrixXR & R,
-                      const double& tolerance)
+                      const double&)
 {
     // FIXME why tolerance is not used??
 

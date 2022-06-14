@@ -19,7 +19,7 @@
 # states.
 
 
-Header header
+std_msgs/Header header
 
 string[] name
 float64[] position

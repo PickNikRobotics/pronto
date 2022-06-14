@@ -26,16 +26,16 @@
 namespace pronto {
 namespace quadruped {
 
-LegOdometerROS::LegOdometerROS(ros::NodeHandle &nh,
+LegOdometerROS::LegOdometerROS(const rclcpp::Node::SharedPtr& node,
                                FeetJacobians &feet_jacobians,
                                ForwardKinematics &forward_kinematics) :
-    LegOdometer(feet_jacobians, forward_kinematics), nh_(nh)
+    LegOdometer(feet_jacobians, forward_kinematics), node_(node)
 {
     // get parameters for the leg odometry
-    std::string legodo_prefix = "legodo/";
+    std::string legodo_prefix = "legodo.";
     int legodo_mode;
-    if(!nh_.getParam(legodo_prefix + "legodo_mode", legodo_mode)){
-        ROS_WARN_STREAM("Could not get param \"" << legodo_prefix + "legodo_mode\". Using default.");
+    if(!node_->get_parameter_or(legodo_prefix + "legodo_mode", legodo_mode, 2)){
+        RCLCPP_WARN_STREAM(node_->get_logger(), "Could not get param \"" << legodo_prefix + "legodo_mode\". Using default.");
     }
 
     // # STATIC_SIGMA 0x00, VAR_SIGMA 0x01, IMPACT_SIGMA 0x02, WEIGHTED_AVG 0x04, ALPHA_FILTER : 0x08, KALMAN_FILTER : 0x10

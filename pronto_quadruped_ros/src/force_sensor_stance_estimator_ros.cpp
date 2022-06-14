@@ -10,12 +10,12 @@ ForceSensorStanceEstimatorROS::ForceSensorStanceEstimatorROS(double force_thresh
 
 }
 
-ForceSensorStanceEstimatorROS::ForceSensorStanceEstimatorROS(ros::NodeHandle &nh)
+ForceSensorStanceEstimatorROS::ForceSensorStanceEstimatorROS(const rclcpp::Node::SharedPtr& node)
 {
   // get parameters for the leg odometry
   std::string legodo_prefix = "legodo/";
   double stance_threshold;
-  nh.getParam(legodo_prefix + "stance_threshold", stance_threshold);
+  node->get_parameter(legodo_prefix + "stance_threshold", stance_threshold);
   force_threshold_ = stance_threshold;
 }
 

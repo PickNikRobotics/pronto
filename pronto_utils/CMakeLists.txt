@@ -1,25 +1,28 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.10.2)
 project(pronto_utils)
 
-set(CMAKE_CXX_STANDARD 14)
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(catkin REQUIRED)
-find_package(Eigen3)
-include_directories(${EIGEN3_INCLUDE_DIRS})
+# TODO: Enable compiler warnings
 
-include_directories(include)
+find_package(ament_cmake REQUIRED)
+find_package(Boost REQUIRED COMPONENTS
+  filesystem
+)
+find_package(Eigen3 REQUIRED)
+
+include_directories(include ${EIGEN3_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 
 set(FILTER_TOOLS_LIB ${PROJECT_NAME})
 set(BACKLASH_FILTER_LIB backlash_filter)
 set(KALMAN_FILTER_LIB kalman_filter)
 
-catkin_package(INCLUDE_DIRS include
-               LIBRARIES ${FILTER_TOOLS_LIB}
-                         ${KALMAN_FILTER_LIB}
-                         ${BACKLASH_FILTER_LIB}
-               DEPENDS EIGEN3)
-
-add_library(${PROJECT_NAME} src/Filter.cpp
+add_library(${PROJECT_NAME} SHARED src/Filter.cpp
                             src/HeavyLowPassFilter.cpp
                             #src/SignalTap.cpp
                             src/DataFileLogger.cpp
@@ -34,11 +37,11 @@ add_library(${PROJECT_NAME} src/Filter.cpp
                             src/BipolarSchmittTrigger.cpp
                             src/Gaussian.cpp)
 
-add_library(${KALMAN_FILTER_LIB} src/alpha_filter.cpp
+add_library(${KALMAN_FILTER_LIB} SHARED src/alpha_filter.cpp
                                  src/kalman_filter.cpp
                                  src/simple_kalman_filter.cpp)
 
-add_library(${BACKLASH_FILTER_LIB} src/backlash_filter.cpp
+add_library(${BACKLASH_FILTER_LIB} SHARED src/backlash_filter.cpp
                                    src/torque_adjustment.cpp)
 
 target_link_libraries(${BACKLASH_FILTER_LIB} ${KALMAN_FILTER_LIB})
@@ -50,13 +53,35 @@ target_link_libraries(${BACKLASH_FILTER_LIB} ${KALMAN_FILTER_LIB})
 #add_executable(test-filter src/filtering_demo.cpp)
 #target_link_libraries(test-filter ${catkin_LIBRARIES} backlash_filter_tools)
 
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ros_testing REQUIRED)
 
-install(TARGETS ${PROJECT_NAME} ${KALMAN_FILTER_LIB} ${BACKLASH_FILTER_LIB}
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+  # These don't pass yet, disable them for now
+  set(ament_cmake_copyright_FOUND TRUE)
+  set(ament_cmake_cppcheck_FOUND TRUE)
+  set(ament_cmake_cpplint_FOUND TRUE)
+  set(ament_cmake_flake8_FOUND TRUE)
+  set(ament_cmake_uncrustify_FOUND TRUE)
+endif()
+
+install(
+  TARGETS ${PROJECT_NAME} ${KALMAN_FILTER_LIB} ${BACKLASH_FILTER_LIB}
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
 )
 
+install(DIRECTORY include/
+        DESTINATION include
+)
 
+ament_export_include_directories(include)
+
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(Eigen3)
+
+ament_package()

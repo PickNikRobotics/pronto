@@ -1,35 +1,40 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.10.2)
 project(pronto_ros)
 
-set(CMAKE_CXX_STANDARD 14)
-add_compile_options(-Wall)
+# Default to C++17
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(DEFAULT_BUILD "Release")
 
-find_package(catkin REQUIRED COMPONENTS pronto_core
-                                        roscpp
-                                        sensor_msgs
-                                        eigen_conversions
-                                        tf_conversions
-                                        tf2_ros
-                                        nav_msgs
-                                        pronto_msgs
-                                        geometry_msgs)
+# TODO: Enable compiler warnings
 
-catkin_package(INCLUDE_DIRS include
-               LIBRARIES ${PROJECT_NAME}
-               CATKIN_DEPENDS pronto_core
-                              roscpp
-                              sensor_msgs
-                              tf_conversions
-                              tf2_ros
-                              eigen_conversions
-                              nav_msgs
-                              pronto_msgs
-                              geometry_msgs
+find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(pronto_core REQUIRED)
+find_package(pronto_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(tf2_ros REQUIRED)
+
+include_directories(include)
+
+set(THIS_PACKAGE_INCLUDE_DEPENDS
+  geometry_msgs
+  nav_msgs
+  pronto_core
+  pronto_msgs
+  rclcpp
+  sensor_msgs
+  tf2_eigen
+  tf2_ros
 )
 
-include_directories(include ${catkin_INCLUDE_DIRS})
-
-add_library(${PROJECT_NAME} src/ins_ros_handler.cpp
+add_library(${PROJECT_NAME} SHARED src/pronto_ros_conversions.cpp
                             src/vicon_ros_handler.cpp
                             src/gps_ros_handler.cpp
                             src/index_meas_ros_handler.cpp
@@ -39,29 +44,71 @@ add_library(${PROJECT_NAME} src/ins_ros_handler.cpp
                             src/lidar_odometry_ros_handler.cpp
                             src/ros_frontend.cpp
                             src/pose_msg_ros_handler.cpp
-                            src/pronto_ros_conversions.cpp)
-
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
-add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+                            src/ins_ros_handler.cpp
+)
+ament_target_dependencies(
+  ${PROJECT_NAME}
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
+target_include_directories(${PROJECT_NAME} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
 
 add_executable(${PROJECT_NAME}_node src/pronto_ros_node.cpp)
-target_link_libraries(${PROJECT_NAME}_node ${PROJECT_NAME} ${catkin_LIBRARIES})
+ament_target_dependencies(
+  ${PROJECT_NAME}_node
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
+target_include_directories(${PROJECT_NAME}_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(${PROJECT_NAME}_node ${PROJECT_NAME})
 
 add_executable(lidar_odometry_visualizer src/lidar_odom_viz.cpp)
-target_link_libraries(lidar_odometry_visualizer ${catkin_LIBRARIES})
-add_dependencies(lidar_odometry_visualizer ${catkin_EXPORTED_TARGETS})
+ament_target_dependencies(
+  lidar_odometry_visualizer
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
+target_include_directories(lidar_odometry_visualizer PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
 
-install(TARGETS ${PROJECT_NAME} lidar_odometry_visualizer ${PROJECT_NAME}_node
-        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ros_testing REQUIRED)
 
-install(DIRECTORY include/${PROJECT_NAME}/
-        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-        FILES_MATCHING PATTERN "*.hpp")
+  # These don't pass yet, disable them for now
+  set(ament_cmake_copyright_FOUND TRUE)
+  set(ament_cmake_cppcheck_FOUND TRUE)
+  set(ament_cmake_cpplint_FOUND TRUE)
+  set(ament_cmake_flake8_FOUND TRUE)
+  set(ament_cmake_uncrustify_FOUND TRUE)
 
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_pronto_ros.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
+endif()
+
+install(
+  TARGETS ${PROJECT_NAME}
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+install(
+  TARGETS lidar_odometry_visualizer ${PROJECT_NAME}_node
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+  INCLUDES DESTINATION include
+)
+
+install(DIRECTORY include/
+        DESTINATION include
+)
+
+ament_export_include_directories(include)
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+
+ament_package()

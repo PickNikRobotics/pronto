@@ -23,20 +23,21 @@
 
 #pragma once
 
-#include <ros/node_handle.h>
+#include <rclcpp/rclcpp.hpp>
 #include <pronto_core/sensing_module.hpp>
 
 #include <pronto_quadruped/StanceEstimatorBase.hpp>
 #include <pronto_quadruped/LegOdometerBase.hpp>
 #include <pronto_quadruped/DataLogger.hpp>
 
-#include <pronto_msgs/JointStateWithAcceleration.h>
-#include <pronto_msgs/QuadrupedStance.h>
-#include <pronto_msgs/QuadrupedForceTorqueSensors.h>
-#include <pronto_msgs/VelocityWithSigmaBounds.h>
-#include <sensor_msgs/JointState.h>
-#include <geometry_msgs/WrenchStamped.h>
-
+#include <pronto_msgs/msg/joint_state_with_acceleration.hpp>
+#include <pronto_msgs/msg/quadruped_stance.hpp>
+#include <pronto_msgs/msg/quadruped_force_torque_sensors.hpp>
+#include <pronto_msgs/msg/velocity_with_sigma_bounds.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <geometry_msgs/msg/wrench_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
+#include <geometry_msgs/msg/accel_stamped.hpp>
 
 
 namespace pronto {
@@ -50,7 +51,7 @@ public:
     using Update = RBISUpdateInterface;
 
 public:
-    LegodoHandlerBase(ros::NodeHandle& nh,
+    LegodoHandlerBase(const rclcpp::Node::SharedPtr& node,
                       StanceEstimatorBase& fcf,
                       LegOdometerBase& fj);
     virtual ~LegodoHandlerBase() = default;
@@ -90,44 +91,44 @@ protected:
     uint64_t utime_offset_ = 0;
 
     // Debug Publishers
-    std::vector<ros::Publisher> vel_debug_;
-    std::vector<ros::Publisher> grf_debug_;
-    std::vector<ros::Publisher> grf_in_foot_frame_debug_;
-    ros::Publisher vel_raw_;
-    ros::Publisher prior_joint_accel_debug_;
-    ros::Publisher prior_velocity_debug_;
-    ros::Publisher prior_accel_debug_;
-    ros::Publisher vel_sigma_bounds_pub_;
+    std::vector<rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr> vel_debug_;
+    std::vector<rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr> grf_debug_;
+    std::vector<rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr> grf_in_foot_frame_debug_;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr vel_raw_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr prior_joint_accel_debug_;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr prior_velocity_debug_;
+    rclcpp::Publisher<geometry_msgs::msg::AccelStamped>::SharedPtr prior_accel_debug_;
+    rclcpp::Publisher<pronto_msgs::msg::VelocityWithSigmaBounds>::SharedPtr vel_sigma_bounds_pub_;
 
     bool debug_ = true;  // Debug output including CSV output
     bool output_log_to_file_ = true;
-    geometry_msgs::WrenchStamped wrench_msg_;
-    pronto_msgs::QuadrupedStance stance_msg_;
-    ros::Publisher stance_pub_;
+    geometry_msgs::msg::WrenchStamped wrench_msg_;
+    pronto_msgs::msg::QuadrupedStance stance_msg_;
+    rclcpp::Publisher<pronto_msgs::msg::QuadrupedStance>::SharedPtr stance_pub_;
 
     std::unique_ptr<pronto::DataLogger> dl_pose_;
     std::unique_ptr<pronto::DataLogger> dl_vel_;
     std::unique_ptr<pronto::DataLogger> dl_vel_sigma_;
 
-    pronto_msgs::VelocityWithSigmaBounds vel_sigma_bound_msg_;
+    pronto_msgs::msg::VelocityWithSigmaBounds vel_sigma_bound_msg_;
 
 protected:
     virtual Update* computeVelocity();
     virtual void getPreviousState (const StateEstimator *est);
 };
 
-class LegodoHandlerROS : public pronto::SensingModule<sensor_msgs::JointState>,
+class LegodoHandlerROS : public pronto::SensingModule<sensor_msgs::msg::JointState>,
                          public LegodoHandlerBase
 {
 public:
-    LegodoHandlerROS(ros::NodeHandle& nh,
+    LegodoHandlerROS(const rclcpp::Node::SharedPtr& node,
                      StanceEstimatorBase &stance_est,
                      LegOdometerBase &legodo);
     virtual ~LegodoHandlerROS() = default;
 
-    Update * processMessage(const sensor_msgs::JointState *msg, StateEstimator *est) override;
+    Update * processMessage(const sensor_msgs::msg::JointState *msg, StateEstimator *est) override;
 
-    bool processMessageInit(const sensor_msgs::JointState *msg,
+    bool processMessageInit(const sensor_msgs::msg::JointState *msg,
                             const std::map<std::string, bool> &sensor_initialized,
                             const RBIS &default_state,
                             const RBIM &default_cov,
@@ -135,18 +136,18 @@ public:
                             RBIM &init_cov) override;
 };
 
-class LegodoHandlerWithAccelerationROS : public pronto::SensingModule<pronto_msgs::JointStateWithAcceleration>,
+class LegodoHandlerWithAccelerationROS : public pronto::SensingModule<pronto_msgs::msg::JointStateWithAcceleration>,
                                            public LegodoHandlerBase
 {
 public:
-    LegodoHandlerWithAccelerationROS(ros::NodeHandle& nh,
+    LegodoHandlerWithAccelerationROS(const rclcpp::Node::SharedPtr& node,
                                        StanceEstimatorBase &stance_est,
-                                       LegOdometerBase &legodo) : LegodoHandlerBase(nh, stance_est, legodo) {}
+                                       LegOdometerBase &legodo) : LegodoHandlerBase(node, stance_est, legodo) {}
     virtual ~LegodoHandlerWithAccelerationROS() = default;
 
-    Update * processMessage(const pronto_msgs::JointStateWithAcceleration *msg, StateEstimator *est) override;
+    Update * processMessage(const pronto_msgs::msg::JointStateWithAcceleration *msg, StateEstimator *est) override;
 
-    bool processMessageInit(const pronto_msgs::JointStateWithAcceleration* /*msg*/,
+    bool processMessageInit(const pronto_msgs::msg::JointStateWithAcceleration* /*msg*/,
                             const std::map<std::string, bool>& /*sensor_initialized*/,
                             const RBIS& /*default_state*/,
                             const RBIM& /*default_cov*/,
@@ -155,47 +156,47 @@ public:
 };
 
 class ForceSensorLegodoHandlerROS : public LegodoHandlerBase,
-                                    public pronto::DualSensingModule<sensor_msgs::JointState,
-                                                                     pronto_msgs::QuadrupedForceTorqueSensors>
+                                    public pronto::DualSensingModule<sensor_msgs::msg::JointState,
+                                                                     pronto_msgs::msg::QuadrupedForceTorqueSensors>
 {
 public:
-  ForceSensorLegodoHandlerROS(ros::NodeHandle& nh,
+  ForceSensorLegodoHandlerROS(const rclcpp::Node::SharedPtr& node,
                               StanceEstimatorBase& stance_est,
                               LegOdometerBase& legodo);
   virtual ~ForceSensorLegodoHandlerROS() = default;
 
-  Update * processMessage(const sensor_msgs::JointState *msg, StateEstimator *est) override;
+  Update * processMessage(const sensor_msgs::msg::JointState *msg, StateEstimator *est) override;
 
-  bool processMessageInit(const sensor_msgs::JointState *msg,
+  bool processMessageInit(const sensor_msgs::msg::JointState *msg,
                           const std::map<std::string, bool> &sensor_initialized,
                           const RBIS &default_state,
                           const RBIM &default_cov,
                           RBIS &init_state,
                           RBIM &init_cov) override;
 
-  void processSecondaryMessage(const pronto_msgs::QuadrupedForceTorqueSensors &msg) override;
+  void processSecondaryMessage(const pronto_msgs::msg::QuadrupedForceTorqueSensors &msg) override;
 };
 
 class FootSensorLegodoHandlerROS : public LegodoHandlerBase,
-                                   public pronto::DualSensingModule<sensor_msgs::JointState,
-                                                                    pronto_msgs::QuadrupedStance>
+                                   public pronto::DualSensingModule<sensor_msgs::msg::JointState,
+                                                                    pronto_msgs::msg::QuadrupedStance>
 {
 public:
-  FootSensorLegodoHandlerROS(ros::NodeHandle& nh,
+  FootSensorLegodoHandlerROS(const rclcpp::Node::SharedPtr& node,
                              StanceEstimatorBase& stance_est,
                              LegOdometerBase& legodo);
   virtual ~FootSensorLegodoHandlerROS() = default;
 
-  Update * processMessage(const sensor_msgs::JointState *msg, StateEstimator *est) override;
+  Update * processMessage(const sensor_msgs::msg::JointState *msg, StateEstimator *est) override;
 
-  bool processMessageInit(const sensor_msgs::JointState *msg,
+  bool processMessageInit(const sensor_msgs::msg::JointState *msg,
                           const std::map<std::string, bool> &sensor_initialized,
                           const RBIS &default_state,
                           const RBIM &default_cov,
                           RBIS &init_state,
                           RBIM &init_cov) override;
 
-  void processSecondaryMessage(const pronto_msgs::QuadrupedStance &msg) override;
+  void processSecondaryMessage(const pronto_msgs::msg::QuadrupedStance &msg) override;
 };
 
 }  // namespace quadruped

@@ -26,16 +26,14 @@
 namespace pronto {
 namespace quadruped {
 
-DynamicStanceEstimatorROS::DynamicStanceEstimatorROS(ros::NodeHandle &nh,
+DynamicStanceEstimatorROS::DynamicStanceEstimatorROS(const rclcpp::Node::SharedPtr& node,
                                                      InverseDynamicsBase &inverse_dynamics,
                                                      JSIMBase &jsim,
                                                      FeetContactForces &feet_contact_forces,
                                                      ForwardKinematics &forward_kinematics) :
     DynamicStanceEstimator(inverse_dynamics, jsim, feet_contact_forces, forward_kinematics),
-    nh_(nh)
+    node_(node)
 {
-    // fetch some useful parameters from nodehandle here
-    (void)nh_;  // To avoid "unused private member" warning
 }
 
 } // namespace quadruped

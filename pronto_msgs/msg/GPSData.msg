@@ -1,4 +1,4 @@
-Header header
+std_msgs/Header header
 uint64 utime
 int32 gps_lock
 float64 longitude

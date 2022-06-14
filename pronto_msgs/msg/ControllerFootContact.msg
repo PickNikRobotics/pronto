@@ -1,4 +1,4 @@
-Header header
+std_msgs/Header header
 int32 num_right_foot_contacts
 
 # Porting from LCM definition:

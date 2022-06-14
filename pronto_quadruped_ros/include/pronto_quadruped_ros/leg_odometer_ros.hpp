@@ -24,17 +24,17 @@
 #pragma once
 
 #include <pronto_quadruped/LegOdometer.hpp>
-#include <ros/node_handle.h>
+#include <rclcpp/rclcpp.hpp>
 namespace pronto {
 namespace quadruped {
 
 class LegOdometerROS : public LegOdometer {
 public:
-    LegOdometerROS(ros::NodeHandle& nh,
+    LegOdometerROS(const rclcpp::Node::SharedPtr& node,
                    FeetJacobians &feet_jacobians,
                    ForwardKinematics &forward_kinematics);
 private:
-    ros::NodeHandle& nh_;
+    std::shared_ptr<rclcpp::Node> node_;
 };
 }  // namespace quadruped
 }  // namespace pronto

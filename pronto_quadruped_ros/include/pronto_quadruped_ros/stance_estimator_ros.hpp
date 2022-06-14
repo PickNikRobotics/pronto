@@ -24,17 +24,17 @@
 #pragma once
 
 #include <pronto_quadruped/StanceEstimator.hpp>
-#include <ros/node_handle.h>
+#include <rclcpp/rclcpp.hpp>
 
 namespace pronto {
 namespace quadruped {
 
 class StanceEstimatorROS : public StanceEstimator {
 public:
-    StanceEstimatorROS(ros::NodeHandle& nh,
+    StanceEstimatorROS(const rclcpp::Node::SharedPtr& node,
                        FeetContactForces& feet_forces);
 private:
-    ros::NodeHandle& nh_;
+    std::shared_ptr<rclcpp::Node> node_;
 };
 }  // namespace quadruped
 }  // namespace pronto

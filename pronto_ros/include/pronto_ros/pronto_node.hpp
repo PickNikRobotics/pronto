@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ros/node_handle.h>
+#include <rclcpp/rclcpp.hpp>
 #include "pronto_ros/ros_frontend.hpp"
 #include "pronto_ros/ins_ros_handler.hpp"
 #include "pronto_ros/vicon_ros_handler.hpp"
@@ -18,27 +18,27 @@ struct is_dummy_msg {
 };
 
 template <>
-struct is_dummy_msg<std_msgs::Header>{
+struct is_dummy_msg<std_msgs::msg::Header>{
   static const bool value = true;
 };
 
-// use the std_msgs::Header as a placeholder for a dummy message type
-template <class JointStateMsgT, class ContactStateMsgT = std_msgs::Header>
+// use the std_msgs::msg::Header as a placeholder for a dummy message type
+template <class JointStateMsgT, class ContactStateMsgT = std_msgs::msg::Header>
 class ProntoNode {
 public:
     using SensorList = std::vector<std::string>;
     using SensorSet = std::set<std::string>;
 public:
-    ProntoNode(ros::NodeHandle& nh,
+    ProntoNode(const rclcpp::Node::SharedPtr& node,
                SensingModule<JointStateMsgT>& legodo_handler,
-               DualSensingModule<sensor_msgs::Imu, JointStateMsgT>& imu_bias_lock);
+               DualSensingModule<sensor_msgs::msg::Imu, JointStateMsgT>& imu_bias_lock);
     virtual void init(bool subscribe = true);
     virtual void run();
 
 protected:
-    ros::NodeHandle& nh_;
+    std::shared_ptr<rclcpp::Node> node_;
     SensingModule<JointStateMsgT>& legodo_handler_;
-    DualSensingModule<sensor_msgs::Imu, JointStateMsgT>& bias_lock_handler_;
+    DualSensingModule<sensor_msgs::msg::Imu, JointStateMsgT>& bias_lock_handler_;
     ROSFrontEnd front_end;
     SensorList init_sensors;
     SensorList active_sensors;
@@ -53,22 +53,22 @@ protected:
 };
 
 template <class JointStateMsgT, class ContactStateMsgT>
-ProntoNode<JointStateMsgT, ContactStateMsgT>::ProntoNode(ros::NodeHandle &nh,
+ProntoNode<JointStateMsgT, ContactStateMsgT>::ProntoNode(const rclcpp::Node::SharedPtr& node,
                              SensingModule<JointStateMsgT>& legodo_handler,
-                             DualSensingModule<sensor_msgs::Imu, JointStateMsgT>& imu_bias_lock) :
-    nh_(nh), legodo_handler_(legodo_handler), bias_lock_handler_(imu_bias_lock), front_end(nh_)
+                             DualSensingModule<sensor_msgs::msg::Imu, JointStateMsgT>& imu_bias_lock) :
+    node_(node), legodo_handler_(legodo_handler), bias_lock_handler_(imu_bias_lock), front_end(node_)
 {
     // get the list of active and init sensors from the param server
-    if(!nh_.getParam("init_sensors", init_sensors)){
-        ROS_ERROR("Not able to get init_sensors param");
+    if(!node_->get_parameter("init_sensors", init_sensors)){
+        RCLCPP_ERROR(node_->get_logger(), "Not able to get init_sensors param");
     }
 
-    if(!nh_.getParam("active_sensors", active_sensors)){
-        ROS_ERROR("Not able to get active_sensors param");
+    if(!node_->get_parameter("active_sensors", active_sensors)){
+        RCLCPP_ERROR(node_->get_logger(), "Not able to get active_sensors param");
     }
     bool publish_pose = false;
-    if(!nh_.getParam("publish_pose", publish_pose)){
-        ROS_WARN("Not able to get publish_pose param. Not publishing pose.");
+    if(!node_->get_parameter("publish_pose", publish_pose)){
+        RCLCPP_WARN(node_->get_logger(), "Not able to get publish_pose param. Not publishing pose.");
     }
 }
 
@@ -98,19 +98,20 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
     // iterate over the sensors
     for(SensorSet::iterator it = all_sensors.begin(); it != all_sensors.end(); ++it)
     {
-        if(!nh_.getParam(*it + "/roll_forward_on_receive", roll_forward)){
-            ROS_WARN_STREAM("Not adding sensor \"" << *it << "\".");
-            ROS_WARN_STREAM ("Param \"roll_forward_on_receive\" not available.");
+        RCLCPP_WARN_STREAM(node_->get_logger(), "Getting params for sensor: " << *it);
+        if(!node_->get_parameter(*it + ".roll_forward_on_receive", roll_forward)){
+            RCLCPP_WARN_STREAM(node_->get_logger(), "Not adding sensor \"" << *it << "\".");
+            RCLCPP_WARN_STREAM(node_->get_logger(), "Param \"roll_forward_on_receive\" not available.");
             continue;
         }
-        if(!nh_.getParam(*it + "/publish_head_on_message", publish_head)){
-            ROS_WARN_STREAM("Not adding sensor \"" << *it << "\".");
-            ROS_WARN_STREAM ("Param \"publish_head_on_message\" not available.");
+        if(!node_->get_parameter(*it + ".publish_head_on_message", publish_head)){
+            RCLCPP_WARN_STREAM(node_->get_logger(), "Not adding sensor \"" << *it << "\".");
+            RCLCPP_WARN_STREAM(node_->get_logger(), "Param \"publish_head_on_message\" not available.");
             continue;
         }
-        if(!nh_.getParam(*it + "/topic", topic)){
-            ROS_WARN_STREAM("Not adding sensor \"" << *it << "\".");
-            ROS_WARN_STREAM ("Param \"topic\" not available.");
+        if(!node_->get_parameter(*it + ".topic", topic)){
+            RCLCPP_WARN_STREAM(node_->get_logger(), "Not adding sensor \"" << *it << "\".");
+            RCLCPP_WARN_STREAM(node_->get_logger(), "Param \"topic\" not available.");
             continue;
         }
         // check if the sensor is also used to initialize
@@ -119,7 +120,7 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
         // is the IMU module in the list? Typically yes.
         if(it->compare("ins") == 0)
         {
-            ins_handler_ = std::make_shared<InsHandlerROS>(nh_);
+            ins_handler_ = std::make_shared<InsHandlerROS>(node_);
             if(active){
                 front_end.addSensingModule(*ins_handler_, *it, roll_forward, publish_head, topic, subscribe);
             }
@@ -138,21 +139,21 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
                 // if secondary topic is provided, and the second message is not dummy,
                 // attempt to cast the leg odometry handler as a DualHandler instead of SingleHandler
                 if(!is_dummy_msg<ContactStateMsgT>::value &&
-                   nh_.getParam(*it + "/secondary_topic", secondary_topic))
+                   node_->get_parameter(*it + ".secondary_topic", secondary_topic))
                 {
                   try {
-                    ROS_INFO_STREAM("Subscribing to secondary topic for legodo: " << secondary_topic);
+                    RCLCPP_INFO_STREAM(node_->get_logger(), "Subscribing to secondary topic for legodo: " << secondary_topic);
                     front_end.addSecondarySensingModule(dynamic_cast<DualSensingModule<JointStateMsgT,ContactStateMsgT>&>(legodo_handler_),
                                                         *it,
                                                         secondary_topic,
                                                         subscribe);
                   } catch(const std::bad_cast& e){
-                    ROS_WARN_STREAM("Could not use the provided Leg Odometry handler as DualSensingModule<"
+                    RCLCPP_WARN_STREAM(node_->get_logger(), "Could not use the provided Leg Odometry handler as DualSensingModule<"
                                     << type_name<JointStateMsgT>() << ", " << type_name<ContactStateMsgT>() << ">.");
-                    ROS_WARN_STREAM(e.what());
+                    RCLCPP_WARN_STREAM(node_->get_logger(), e.what());
                   }
                 } else {
-                    ROS_WARN_STREAM("Legodo not subscribing to secondary topic: Dummy message check: " << is_dummy_msg<ContactStateMsgT>::value);
+                    RCLCPP_WARN_STREAM(node_->get_logger(), "Legodo not subscribing to secondary topic: Dummy message check: " << is_dummy_msg<ContactStateMsgT>::value);
                 }
             }
             if(init){
@@ -160,7 +161,7 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
             }
         }
         if(it->compare("pose_meas") == 0){
-            pose_handler_ = std::make_shared<PoseHandlerROS>(nh_);
+            pose_handler_ = std::make_shared<PoseHandlerROS>(node_);
             if(active){
                 front_end.addSensingModule(*pose_handler_, *it, roll_forward, publish_head, topic, subscribe);
             }
@@ -170,7 +171,7 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
 
         }
         if(it->compare("vicon") == 0 ){
-            vicon_handler_ = std::make_shared<ViconHandlerROS>(nh_);
+            vicon_handler_ = std::make_shared<ViconHandlerROS>(node_);
             if(active){
                 front_end.addSensingModule(*vicon_handler_, *it, roll_forward, publish_head, topic, subscribe);
             }
@@ -179,9 +180,9 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
             }
         }
         if(it->compare("bias_lock") == 0){
-          if(!nh_.getParam(*it + "/secondary_topic", secondary_topic)){
-              ROS_WARN_STREAM("Not adding sensor \"" << *it << "\".");
-              ROS_WARN_STREAM ("Param \"secondary_topic\" not available.");
+          if(!node_->get_parameter(*it + ".secondary_topic", secondary_topic)){
+              RCLCPP_WARN_STREAM(node_->get_logger(), "Not adding sensor \"" << *it << "\".");
+              RCLCPP_WARN_STREAM(node_->get_logger(), "Param \"secondary_topic\" not available.");
               continue;
           }
           if(active){
@@ -190,7 +191,7 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
           }
         }
         if(it->compare("fovis") == 0 ){
-            vo_handler_ = std::make_shared<VisualOdometryHandlerROS>(nh_);
+            vo_handler_ = std::make_shared<VisualOdometryHandlerROS>(node_);
             if(active){
                 front_end.addSensingModule(*vo_handler_, *it, roll_forward, publish_head, topic, subscribe);
             }
@@ -200,11 +201,11 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
         }
         if(it->compare("scan_matcher") == 0 ){
           bool use_relative_pose = true;
-          nh_.getParam(*it + "/relative_pose", use_relative_pose);
-          ROS_WARN_STREAM("Scan matcher will use " << (use_relative_pose ? "relative " : "absolute ") << "pose");
+          node_->get_parameter(*it + ".relative_pose", use_relative_pose);
+          RCLCPP_WARN_STREAM(node_->get_logger(), "Scan matcher will use " << (use_relative_pose ? "relative " : "absolute ") << "pose");
 
           if(use_relative_pose){
-            sm_handler_ = std::make_shared<LidarOdometryHandlerROS>(nh_);
+            sm_handler_ = std::make_shared<LidarOdometryHandlerROS>(node_);
             if(active){
                 front_end.addSensingModule(*sm_handler_, *it, roll_forward, publish_head, topic, subscribe);
             }
@@ -212,7 +213,7 @@ void ProntoNode<JointStateMsgT, ContactStateMsgT>::init(bool subscribe) {
                 front_end.addInitModule(*sm_handler_, *it, topic, subscribe);
             }
           } else {
-            sm2_handler_ = std::make_shared<ScanMatcherHandler>(nh_);
+            sm2_handler_ = std::make_shared<ScanMatcherHandler>(node_);
             if(active){
                 front_end.addSensingModule(*sm2_handler_, *it, roll_forward, publish_head, topic, subscribe);
             }
@@ -228,7 +229,7 @@ template <class JointStateMsgT, class ContactStateMsgT>
 void ProntoNode<JointStateMsgT, ContactStateMsgT>::run() {
     init(true);
     // you ...
-    ros::spin();
+    rclcpp::spin(node_);
     // ... me round (like a record)!
 }
 }

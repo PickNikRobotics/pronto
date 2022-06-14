@@ -1,14 +1,14 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.10.2)
 project(pronto_quadruped_commons)
 
-add_compile_options(-Wall)
-
-find_package(Eigen3 REQUIRED)
-
-find_package(catkin REQUIRED)
-
-set(CMAKE_CXX_STANDARD 11)
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_compile_options(-Wall)
 
 set(BUILD_DOC false  CACHE BOOL "Build Doxygen documentation")
 
@@ -34,20 +34,19 @@ if(${BUILD_DOC})
     endif (DOXYGEN_FOUND)
 endif()
 
-catkin_package(
-   INCLUDE_DIRS include ${EIGEN3_INCLUDE_DIRS}
-   CATKIN_DEPENDS
-   LIBRARIES 
-   DEPENDS
-)
+
+find_package(ament_cmake REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 # Include directories
 include_directories(include ${EIGEN3_INCLUDE_DIRS})
 
-# Install iit-rbd globally
-install(DIRECTORY include/iit
-        DESTINATION ${CATKIN_GLOBAL_INCLUDE_DESTINATION})
+ament_export_include_directories(include)
 
-# Install pronto_quadruped_commons locally
-install(DIRECTORY include/${PROJECT_NAME}/
-        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+ament_export_dependencies(Eigen3)
+
+install(DIRECTORY include/
+        DESTINATION include
+)
+
+ament_package()

@@ -1,5 +1,6 @@
 #include "pronto_core/rbis.hpp"
 #include "pronto_core/rotations.hpp"
+#include <iostream>
 
 using namespace pronto::rotation;
 using namespace Eigen;

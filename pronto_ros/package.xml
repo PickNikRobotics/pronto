@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>pronto_ros</name>
   <version>0.3.0</version>
   <description>The pronto_ros package</description>
@@ -9,29 +9,19 @@
 
   <license>LGPLv2.1</license>
 
-  <!-- Url tags are optional, but multiple are allowed, one per tag -->
-  <!-- Optional attribute type can be: website, bugtracker, or repository -->
-  <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/pronto_ros</url> -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-
-  <!-- Author tags are optional, multiple are allowed, one per tag -->
-  <!-- Authors do not have to be maintainers, but could be -->
-  <!-- Example: -->
-  <!-- <author email="jane.doe@example.com">Jane Doe</author> -->
-
-  <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>pronto_core</build_depend>
-  <build_depend>roscpp</build_depend>
-  <build_export_depend>pronto_core</build_export_depend>
-  <build_export_depend>roscpp</build_export_depend>
-  <exec_depend>pronto_core</exec_depend>
-  <exec_depend>roscpp</exec_depend>
-  <depend>sensor_msgs</depend>
-  <depend>tf_conversions</depend>
-  <depend>tf2_ros</depend>
-  <depend>eigen_conversions</depend>
-  <depend>nav_msgs</depend>
-  <depend>pronto_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>pronto_core</depend>
+  <depend>pronto_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_eigen</depend>
+  <depend>tf2_ros</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
 </package>

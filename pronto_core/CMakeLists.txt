@@ -1,22 +1,24 @@
-cmake_minimum_required(VERSION 3.0.2)
-
+cmake_minimum_required(VERSION 3.10.2)
 project(pronto_core)
-set(CMAKE_CXX_STANDARD 14)
+
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# TODO: Enable compiler warnings
+
 set(PRONTO_CORE_LIB ${PROJECT_NAME})
 
-add_compile_options(-Wall)
-
-find_package(catkin REQUIRED)
+find_package(ament_cmake REQUIRED)
 
 find_package(Eigen3 REQUIRED)
 
-include_directories(include ${EIGEN3_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS})
+include_directories(include ${EIGEN3_INCLUDE_DIRS})
 
-catkin_package(INCLUDE_DIRS include
-               LIBRARIES ${PRONTO_CORE_LIB}               
-               DEPENDS EIGEN3)
-
-add_library(${PRONTO_CORE_LIB} src/rbis.cpp
+add_library(${PRONTO_CORE_LIB} SHARED src/rbis.cpp
                                src/rotations.cpp
                                src/rigidbody.cpp
                                src/ins_module.cpp
@@ -32,19 +34,45 @@ add_library(${PRONTO_CORE_LIB} src/rbis.cpp
                                src/gps_module.cpp
                                src/pose_meas_module.cpp)
 
-target_link_libraries(${PRONTO_CORE_LIB} ${catkin_LIBRARIES})
+target_include_directories(${PRONTO_CORE_LIB} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(${PRONTO_CORE_LIB} Eigen3::Eigen)
 
-if(CATKIN_ENABLE_TESTING)
-  catkin_add_gtest(ins_module_ballistic test/imu_module_test.cpp)
-  target_link_libraries(ins_module_ballistic ${catkin_LIBRARIES} ${PRONTO_CORE_LIB} pthread)
+ament_export_include_directories(include)
+
+ament_export_targets(export_${PRONTO_CORE_LIB} HAS_LIBRARY_TARGET)
+ament_export_dependencies(Eigen3)
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ros_testing REQUIRED)
+
+  # These don't pass yet, disable them for now
+  set(ament_cmake_copyright_FOUND TRUE)
+  set(ament_cmake_cppcheck_FOUND TRUE)
+  set(ament_cmake_cpplint_FOUND TRUE)
+  set(ament_cmake_flake8_FOUND TRUE)
+  set(ament_cmake_uncrustify_FOUND TRUE)
+
+  # TODO (vatanaksoytezer): Enable tests when I have more time
+  # catkin_add_gtest(ins_module_ballistic test/imu_module_test.cpp)
+  # target_link_libraries(ins_module_ballistic ${catkin_LIBRARIES} ${PRONTO_CORE_LIB} pthread)
 endif()
 
-install(TARGETS ${TARGETS} ${PRONTO_CORE_LIB}
-        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(
+  TARGETS ${PRONTO_CORE_LIB}
+  EXPORT export_${PRONTO_CORE_LIB}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
 
+install(DIRECTORY include/
+        DESTINATION include
+)
 
-install(DIRECTORY include/${PROJECT_NAME}/
-        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-        FILES_MATCHING PATTERN "*.hpp")
+ament_package()

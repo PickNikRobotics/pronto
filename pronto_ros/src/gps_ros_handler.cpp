@@ -3,15 +3,15 @@
 
 namespace pronto {
 
-GPSHandlerROS::GPSHandlerROS(ros::NodeHandle &nh) : nh_(nh) {
-    std::string prefix = "gps/";
+GPSHandlerROS::GPSHandlerROS(const rclcpp::Node::SharedPtr &node) : node_(node) {
+    std::string prefix = "gps.";
     GPSConfig cfg;
-    nh_.getParam(prefix + "r_xy", cfg.r_gps_xy);
-    nh_.getParam(prefix + "r_z", cfg.r_gps_z);
+    node_->get_parameter(prefix + "r_xy", cfg.r_gps_xy);
+    node_->get_parameter(prefix + "r_z", cfg.r_gps_z);
     gps_module_.reset(new GPSModule(cfg));
 }
 
-RBISUpdateInterface* GPSHandlerROS::processMessage(const pronto_msgs::GPSData *msg,
+RBISUpdateInterface* GPSHandlerROS::processMessage(const pronto_msgs::msg::GPSData *msg,
                                                    StateEstimator *est)
 {
     gpsDataFromROS(*msg, gps_meas_);
@@ -20,7 +20,7 @@ RBISUpdateInterface* GPSHandlerROS::processMessage(const pronto_msgs::GPSData *m
 
 }
 
-bool GPSHandlerROS::processMessageInit(const pronto_msgs::GPSData *msg,
+bool GPSHandlerROS::processMessageInit(const pronto_msgs::msg::GPSData *msg,
                                        const std::map<std::string, bool> &sensor_initialized,
                                        const RBIS &default_state,
                                        const RBIM &default_cov,

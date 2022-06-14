@@ -9,14 +9,14 @@ IndexedMeasurementHandlerROS::IndexedMeasurementHandlerROS(const RBISUpdateInter
 
 }
 
-RBISUpdateInterface * IndexedMeasurementHandlerROS::processMessage(const pronto_msgs::IndexedMeasurement * msg,
+RBISUpdateInterface * IndexedMeasurementHandlerROS::processMessage(const pronto_msgs::msg::IndexedMeasurement * msg,
                                                                    StateEstimator* state_estimator)
 {
     indexMeasurementFromROS(*msg, index_msg_);
     return index_module_.processMessage(&index_msg_, state_estimator);
 }
 
-bool IndexedMeasurementHandlerROS::processMessageInit(const pronto_msgs::IndexedMeasurement * msg,
+bool IndexedMeasurementHandlerROS::processMessageInit(const pronto_msgs::msg::IndexedMeasurement * msg,
                                                    const std::map<std::string, bool> & sensors_initialized,
                                                    const RBIS & default_state,
                                                    const RBIM & default_cov,

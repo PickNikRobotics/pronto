@@ -3,12 +3,12 @@
 
 namespace pronto {
 
-VisualOdometryHandlerROS::VisualOdometryHandlerROS(ros::NodeHandle& nh) {
-  std::string prefix = "fovis/";
+VisualOdometryHandlerROS::VisualOdometryHandlerROS(const rclcpp::Node::SharedPtr& node) : node_(node) {
+  std::string prefix = "fovis.";
   VisualOdometryConfig cfg;
   std::string mode_str = "pos";
-  if(!nh.getParam(prefix + "mode", mode_str)){
-    ROS_WARN_STREAM("Couldn't read param \"" << prefix << "mode\". Using position.");
+  if(!node_->get_parameter(prefix + "mode", mode_str)){
+    RCLCPP_WARN_STREAM(node_->get_logger(), "Couldn't read param \"" << prefix << "mode\". Using position.");
   }
   if(mode_str.compare("pos") == 0){
     cfg.mode = VisualOdometryMode::MODE_POSITION;
@@ -24,7 +24,7 @@ VisualOdometryHandlerROS::VisualOdometryHandlerROS(ros::NodeHandle& nh) {
     cfg.z_indices.head<3>() = RBIS::positionInds();
     cfg.z_indices.tail<3>() = RBIS::chiInds();
   } else {
-    ROS_WARN_STREAM("Unsupported mode \"" << prefix << mode_str << "\". Using position.");
+    RCLCPP_WARN_STREAM(node_->get_logger(), "Unsupported mode \"" << prefix << mode_str << "\". Using position.");
   }
   // before doing anything, set the covariance matrix to identity
 
@@ -36,20 +36,19 @@ VisualOdometryHandlerROS::VisualOdometryHandlerROS(ros::NodeHandle& nh) {
   double r_rxy = 50;
   double r_ryaw = 50;
 
-  if(!nh.getParam(prefix + "r_px", r_px)){
-    ROS_ERROR_STREAM("Coudn't read param \"" << prefix << "r_px");
+  if(!node_->get_parameter(prefix + "r_px", r_px)){
+    RCLCPP_ERROR_STREAM(node_->get_logger(), "Coudn't read param \"" << prefix << "r_px");
   }
-  if(!nh.getParam(prefix + "r_py", r_py)){
-    ROS_ERROR_STREAM("Coudn't read param \"" << prefix << "r_py");
+  if(!node_->get_parameter(prefix + "r_py", r_py)){
+    RCLCPP_ERROR_STREAM(node_->get_logger(), "Coudn't read param \"" << prefix << "r_py");
   }
-  if(!nh.getParam(prefix + "r_pz", r_pz)){
-    ROS_ERROR_STREAM("Coudn't read param \"" << prefix << "r_pz");
+  if(!node_->get_parameter(prefix + "r_pz", r_pz)){
+    RCLCPP_ERROR_STREAM(node_->get_logger(), "Coudn't read param \"" << prefix << "r_pz");
   }
-  int utime_offset = 0;
-  if(!nh.getParam(prefix + "utime_offset", utime_offset)){
-    ROS_WARN_STREAM("Couldnt' set time offset, set to 0.");
+  utime_offset_ = 0;
+  if(!node_->get_parameter(prefix + "utime_offset", utime_offset_)){
+    RCLCPP_WARN_STREAM(node_->get_logger(), "Couldnt' set time offset, set to 0.");
   }
-  msg_time_offset_ = ros::Duration().fromNSec(utime_offset * 1e3);
 
   // square the standard deviation
   r_px = std::pow(r_px, 2);
@@ -59,11 +58,11 @@ VisualOdometryHandlerROS::VisualOdometryHandlerROS(ros::NodeHandle& nh) {
   cfg.cov_vo.topLeftCorner<3,3>() = Eigen::Vector3d(r_px, r_py, r_pz).asDiagonal();
 
   if(cfg.mode == VisualOdometryMode::MODE_POSITION_ORIENT){
-    if(!nh.getParam(prefix + "r_rxy", r_rxy)){
-      ROS_ERROR_STREAM("Coudn't read param \"" << prefix << "r_rxy");
+    if(!node_->get_parameter(prefix + "r_rxy", r_rxy)){
+      RCLCPP_ERROR_STREAM(node_->get_logger(), "Coudn't read param \"" << prefix << "r_rxy");
     }
-    if(!nh.getParam(prefix + "r_ryaw", r_ryaw)){
-      ROS_ERROR_STREAM("Coudn't read param \"" << prefix << "r_ryaw");
+    if(!node_->get_parameter(prefix + "r_ryaw", r_ryaw)){
+      RCLCPP_ERROR_STREAM(node_->get_logger(), "Coudn't read param \"" << prefix << "r_ryaw");
     }
     // by default the values are in degrees, convert into radians and square
     cfg.cov_vo.bottomRightCorner<3,3>() = Eigen::Matrix3d::Identity() * std::pow((r_rxy * M_PI / 180.0), 2);
@@ -73,27 +72,31 @@ VisualOdometryHandlerROS::VisualOdometryHandlerROS(ros::NodeHandle& nh) {
   vo_module_ = std::make_shared<VisualOdometryModule>(cfg);
 }
 
-RBISUpdateInterface * VisualOdometryHandlerROS::processMessage(const pronto_msgs::VisualOdometryUpdate *msg,
+RBISUpdateInterface * VisualOdometryHandlerROS::processMessage(const pronto_msgs::msg::VisualOdometryUpdate *msg,
                                                                StateEstimator *state_estimator)
 {
 
-  pronto_msgs::VisualOdometryUpdate mymsg = *msg;
+  pronto_msgs::msg::VisualOdometryUpdate mymsg = *msg;
+  builtin_interfaces::msg::Duration msg_time_offset = rclcpp::Duration(utime_offset_ * 1e3);
   try {
-    mymsg.header.stamp = msg->header.stamp + msg_time_offset_;
-    mymsg.curr_timestamp = msg->curr_timestamp + msg_time_offset_;
-    mymsg.prev_timestamp = msg->prev_timestamp + msg_time_offset_;
+    mymsg.header.stamp.nanosec = msg->header.stamp.nanosec + msg_time_offset.nanosec;
+    mymsg.header.stamp.sec = msg->header.stamp.sec + msg_time_offset.sec;
+    mymsg.curr_timestamp.nanosec = msg->curr_timestamp.nanosec + msg_time_offset.nanosec;
+    mymsg.curr_timestamp.sec = msg->curr_timestamp.sec + msg_time_offset.sec;
+    mymsg.prev_timestamp.nanosec = msg->prev_timestamp.nanosec + msg_time_offset.nanosec;
+    mymsg.prev_timestamp.sec = msg->prev_timestamp.sec + msg_time_offset.sec;
   } catch (std::runtime_error& ex) {
-    ROS_WARN_STREAM("HEADER: " << msg->header.stamp.toNSec());
-    ROS_WARN_STREAM("CURR: " << msg->curr_timestamp.toNSec());
-    ROS_WARN_STREAM("PREV: " << msg->prev_timestamp.toNSec());
-    ROS_WARN_STREAM("OFFSET: " << msg_time_offset_.toNSec());
-    ROS_ERROR("Exception: [%s]", ex.what());
+    RCLCPP_WARN_STREAM(node_->get_logger(), "HEADER: " << msg->header.stamp.sec * 1e9 + msg->header.stamp.nanosec);
+    RCLCPP_WARN_STREAM(node_->get_logger(), "CURR: " << msg->curr_timestamp.sec * 1e9 +  msg->curr_timestamp.nanosec);
+    RCLCPP_WARN_STREAM(node_->get_logger(), "PREV: " << msg->prev_timestamp.sec * 1e9 +  msg->prev_timestamp.nanosec);
+    RCLCPP_WARN_STREAM(node_->get_logger(), "OFFSET: " << msg_time_offset.sec * 1e9 + msg_time_offset.nanosec);
+    RCLCPP_ERROR(node_->get_logger(), "Exception: [%s]", ex.what());
   }
   visualOdometryFromROS(mymsg, vo_update_);
   return vo_module_->processMessage(&vo_update_, state_estimator);
 }
 
-bool VisualOdometryHandlerROS::processMessageInit(const pronto_msgs::VisualOdometryUpdate *msg,
+bool VisualOdometryHandlerROS::processMessageInit(const pronto_msgs::msg::VisualOdometryUpdate *msg,
                                                   const std::map<std::string, bool> &sensor_initialized,
                                                   const RBIS &default_state,
                                                   const RBIM &default_cov,

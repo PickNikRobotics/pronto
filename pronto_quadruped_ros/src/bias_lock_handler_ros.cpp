@@ -26,11 +26,11 @@
 using namespace pronto;
 using namespace pronto::quadruped;
 
-ImuBiasLockROS::ImuBiasLockROS(ros::NodeHandle& nh) : ImuBiasLockBaseROS(nh)
+ImuBiasLockROS::ImuBiasLockROS(const rclcpp::Node::SharedPtr& node) : ImuBiasLockBaseROS(node)
 {
 }
 
-RBISUpdateInterface* ImuBiasLockROS::processMessage(const sensor_msgs::Imu *msg,
+RBISUpdateInterface* ImuBiasLockROS::processMessage(const sensor_msgs::msg::Imu *msg,
                                                     StateEstimator *est)
 {
   msgToImuMeasurement(*msg, bias_lock_imu_msg_);
@@ -40,13 +40,13 @@ RBISUpdateInterface* ImuBiasLockROS::processMessage(const sensor_msgs::Imu *msg,
     RBIS head_state;
     RBIM head_cov;
     est->getHeadState(head_state, head_cov);
-    ROS_INFO_STREAM("Bias update. Prior accel bias: " << head_state.accelBias().transpose() << std::endl
+    RCLCPP_INFO_STREAM(node_->get_logger(), "Bias update. Prior accel bias: " << head_state.accelBias().transpose() << std::endl
                               <<  "Prior gyro bias: " << head_state.gyroBias().transpose());
   }
   return update;
 }
 
-bool ImuBiasLockROS::processMessageInit(const sensor_msgs::Imu *msg,
+bool ImuBiasLockROS::processMessageInit(const sensor_msgs::msg::Imu *msg,
                                         const std::map<std::string, bool> &sensor_initialized,
                                         const RBIS &default_state,
                                         const RBIM &default_cov,
@@ -62,13 +62,13 @@ bool ImuBiasLockROS::processMessageInit(const sensor_msgs::Imu *msg,
                                                init_cov);
 }
 
-void ImuBiasLockROS::processSecondaryMessage(const sensor_msgs::JointState &msg) {
+void ImuBiasLockROS::processSecondaryMessage(const sensor_msgs::msg::JointState &msg) {
   jointStateFromROS(msg, bias_lock_js_msg_);
   bias_lock_module_->processSecondaryMessage(bias_lock_js_msg_);
 }
 
 // pronto_msgs/JointStateWithAcceleration (includes acceleration)
-void ImuBiasLockWithAccelerationROS::processSecondaryMessage(const pronto_msgs::JointStateWithAcceleration &msg) {
+void ImuBiasLockWithAccelerationROS::processSecondaryMessage(const pronto_msgs::msg::JointStateWithAcceleration &msg) {
   jointStateWithAccelerationFromROS(msg, bias_lock_js_msg_);
   bias_lock_module_->processSecondaryMessage(bias_lock_js_msg_);
 }

@@ -3,19 +3,22 @@
 #include <pronto_core/sensing_module.hpp>
 #include <pronto_core/state_est.hpp>
 #include <pronto_core/rotations.hpp>
-#include <ros/node_handle.h>
-#include <sensor_msgs/Imu.h>
-#include <geometry_msgs/PoseWithCovarianceStamped.h>
-#include <geometry_msgs/TwistWithCovarianceStamped.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <tf_conversions/tf_eigen.h>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <tf2_eigen/tf2_eigen.h>
 #include <chrono>
 #include <tf2_ros/transform_broadcaster.h>
 #include <string>
 #include <cstdlib>
 #include <cxxabi.h>
-#include <nav_msgs/Path.h>
-#include <eigen_conversions/eigen_msg.h>
+#include <nav_msgs/msg/path.hpp>
+#include <any>
+
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("ros_frontend");
 
 template<typename T>
 std::string type_name()
@@ -37,7 +40,7 @@ public:
 public:
     using SensorId = std::string;
 
-    ROSFrontEnd(ros::NodeHandle &nh, bool verbose = false);
+    ROSFrontEnd(const std::shared_ptr<rclcpp::Node> &node, bool verbose = false);
     virtual ~ROSFrontEnd();
 
     template<class MsgT>
@@ -57,16 +60,11 @@ public:
         if(!subscribe){
             return;
         }
-        ROS_INFO_STREAM(sensor_id << " subscribing to " << topic
+        RCLCPP_INFO_STREAM(LOGGER, sensor_id << " subscribing to " << topic
                         << " with SecondaryMsgT = " << type_name<SecondaryMsgT>());
-        secondary_subscribers_[sensor_id] = nh_.subscribe<SecondaryMsgT>(topic,
-                                                                         10000,
-                                                                         boost::bind(&ROSFrontEnd::secondaryCallback<MsgT, SecondaryMsgT>,
-                                                                                     this,
-                                                                                     _1,
-                                                                                     sensor_id),
-                                                                         ros::VoidConstPtr(),
-                                                                         ros::TransportHints().tcpNoDelay());
+
+        std::function<void(std::shared_ptr<const SecondaryMsgT>)> f = std::bind(&ROSFrontEnd::secondaryCallback<MsgT, SecondaryMsgT>, this, std::placeholders::_1, sensor_id);
+        secondary_subscribers_.push_back(node_->create_subscription<SecondaryMsgT>(topic, 10, f));
     }
 
 
@@ -92,15 +90,15 @@ public:
         return true;
     }
     template <class MsgT>
-    void initCallback(boost::shared_ptr<MsgT const> msg,
+    void initCallback(std::shared_ptr<MsgT const> msg,
                       const SensorId& Key);
 
     template <class PrimaryMsgT, class SecondaryMsgT>
-    void secondaryCallback(boost::shared_ptr<SecondaryMsgT const> msg,
+    void secondaryCallback(std::shared_ptr<SecondaryMsgT const> msg,
                            const SensorId& sensor_id);
 
     template <class MsgT>
-    void callback(boost::shared_ptr<MsgT const> msg,
+    void callback(std::shared_ptr<MsgT const> msg,
                   const SensorId& Key);
 protected:
     bool initializeFilter();
@@ -109,11 +107,8 @@ protected:
     void initializeCovariance();
 
 private:
-    ros::NodeHandle& nh_;
+    std::shared_ptr<rclcpp::Node> node_;
     std::shared_ptr<StateEstimator> state_est_;
-    std::map<SensorId, ros::Subscriber> sensors_subscribers_;
-    std::map<SensorId, ros::Subscriber> secondary_subscribers_;
-    std::map<SensorId, ros::Subscriber> init_subscribers_;
     std::map<SensorId, void*> active_modules_;
     std::map<SensorId, void*> init_modules_;
     std::map<SensorId, bool> initialized_list_;
@@ -129,25 +124,28 @@ private:
     RBIS head_state;
     RBIM head_cov;
 
-    ros::Publisher pose_pub_;
-    ros::Publisher twist_pub_;
-    tf2_ros::TransformBroadcaster tf2_broadcaster_;
-    geometry_msgs::TransformStamped transform_msg_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr twist_pub_;
+    std::vector<rclcpp::SubscriptionBase::SharedPtr> init_subscribers_;
+    std::vector<rclcpp::SubscriptionBase::SharedPtr> sensors_subscribers_;
+    std::vector<rclcpp::SubscriptionBase::SharedPtr> secondary_subscribers_;
+    std::shared_ptr<tf2_ros::TransformBroadcaster> tf2_broadcaster_;
+    geometry_msgs::msg::TransformStamped transform_msg_;
     bool publish_tf_ = false;
 
-    geometry_msgs::PoseWithCovarianceStamped pose_msg_;
-    geometry_msgs::TwistWithCovarianceStamped twist_msg_;
+    geometry_msgs::msg::PoseWithCovarianceStamped pose_msg_;
+    geometry_msgs::msg::TwistWithCovarianceStamped twist_msg_;
 
-    nav_msgs::Path aicp_path;
-    ros::Publisher aicp_path_publisher;
+    nav_msgs::msg::Path aicp_path;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr aicp_path_publisher_;
 
     uint64_t history_span_;
 
-    tf::Vector3 temp_v3;
-    tf::Quaternion temp_q;
+    tf2::Vector3 temp_v3;
+    tf2::Quaternion temp_q;
 
     bool filter_initialized_ = false;
-    bool verbose_ = false;
+    bool verbose_ = true;
 };
 }  // namespace pronto
 
@@ -159,11 +157,12 @@ void ROSFrontEnd::addInitModule(SensingModule<MsgT>& module,
                                 bool subscribe)
 {
     if(init_modules_.count(sensor_id) > 0){
-        ROS_WARN_STREAM("Init Module \"" << sensor_id << "\" already added. Skipping.");
+        RCLCPP_WARN_STREAM(LOGGER, "Init Module \"" << sensor_id << "\" already added. Skipping.");
         return;
     }
-    ROS_INFO_STREAM("Sensor init id: " << sensor_id);
-    ROS_INFO_STREAM("Topic: " << topic);
+    RCLCPP_INFO_STREAM(LOGGER, "Initializing module: " << sensor_id);
+    RCLCPP_INFO_STREAM(LOGGER, "Sensor init id: " << sensor_id);
+    RCLCPP_INFO_STREAM(LOGGER, "Topic: " << topic);
 
     // add the sensor to the list of sensor that require initialization
     std::pair<SensorId, bool> init_id_pair(sensor_id, false);
@@ -176,14 +175,13 @@ void ROSFrontEnd::addInitModule(SensingModule<MsgT>& module,
     if(subscribe){
         std::cerr << sensor_id << " subscribing to " << topic;
         std::cerr << " with MsgT = " << type_name<MsgT>() << std::endl;
-        init_subscribers_[sensor_id] = nh_.subscribe<MsgT>(topic,
-                                                           10000,
-                                                           boost::bind(&ROSFrontEnd::initCallback<MsgT>,
-                                                                       this,
-                                                                       _1,
-                                                                       sensor_id),
-                                                           ros::VoidConstPtr(),
-                                                           ros::TransportHints().tcpNoDelay());
+        std::cerr << "Initializing subscriber for: " << topic << std::endl;
+        std::function<void(std::shared_ptr<const MsgT>)> f = std::bind(&ROSFrontEnd::initCallback<MsgT>, this, std::placeholders::_1, sensor_id);
+        std::cerr << "Initialized function subscriber for: " << topic << std::endl;
+        init_subscribers_.push_back(node_->create_subscription<MsgT>(topic,
+                            10,
+                            f));
+        std::cerr << "Done initializing subscriber for: " << topic << std::endl;
     }
 }
 
@@ -197,14 +195,15 @@ void ROSFrontEnd::addSensingModule(SensingModule<MsgT>& module,
 {
     // int this implementation we allow only one different type of module
     if(active_modules_.count(sensor_id) > 0){
-        ROS_WARN_STREAM("Sensing Module \"" << sensor_id << "\" already added. Skipping.");
+        RCLCPP_WARN_STREAM(LOGGER, "Sensing Module \"" << sensor_id << "\" already added. Skipping.");
         return;
     }
 
-    ROS_INFO_STREAM("Sensor id: " << sensor_id);
-    ROS_INFO_STREAM("Roll forward: "<< (roll_forward? "yes" : "no"));
-    ROS_INFO_STREAM("Publish head: "<< (publish_head? "yes" : "no"));
-    ROS_INFO_STREAM("Topic: " << topic);
+    RCLCPP_INFO_STREAM(LOGGER, "Activating module: " << sensor_id);
+    RCLCPP_INFO_STREAM(LOGGER, "Sensor id: " << sensor_id);
+    RCLCPP_INFO_STREAM(LOGGER, "Roll forward: "<< (roll_forward? "yes" : "no"));
+    RCLCPP_INFO_STREAM(LOGGER, "Publish head: "<< (publish_head? "yes" : "no"));
+    RCLCPP_INFO_STREAM(LOGGER, "Topic: " << topic);
 
     // store the will to roll forward when the message is received
     std::pair<SensorId, bool> roll_pair(sensor_id, roll_forward);
@@ -223,21 +222,22 @@ void ROSFrontEnd::addSensingModule(SensingModule<MsgT>& module,
     if(subscribe){
         std::cerr << sensor_id << " subscribing to " << topic;
         std::cerr << " with MsgT = " << type_name<MsgT>() << std::endl;
-        sensors_subscribers_[sensor_id] = nh_.subscribe<MsgT>(topic,
-                                                              10000,
-                                                              boost::bind(&ROSFrontEnd::callback<MsgT>,
-                                                                          this, _1, sensor_id),
-                                                              ros::VoidConstPtr(),
-                                                              ros::TransportHints().tcpNoDelay());
+        std::cerr << "Activating subscriber for: " << topic << std::endl;
+        std::function<void(std::shared_ptr<const MsgT>)> f = std::bind(&ROSFrontEnd::callback<MsgT>, this, std::placeholders::_1, sensor_id);
+        std::cerr << "Activated function subcriber for: " << topic << std::endl;;
+        sensors_subscribers_.push_back(node_->create_subscription<MsgT>(topic,
+                                            10,
+                                            f));
+        std::cerr << "Done activating subscriber for: " << topic << std::endl;
     }
 }
 
 
 
 template <class MsgT>
-void ROSFrontEnd::initCallback(boost::shared_ptr<MsgT const> msg, const SensorId& sensor_id){
+void ROSFrontEnd::initCallback(std::shared_ptr<MsgT const> msg, const SensorId& sensor_id){
     if(verbose_){
-        ROS_INFO_STREAM("Init callback for sensor " << sensor_id);
+        RCLCPP_INFO_STREAM(LOGGER, "Init callback for sensor " << sensor_id);
     }
     if(initialized_list_.count(sensor_id) > 0 && !initialized_list_[sensor_id])
     {
@@ -252,7 +252,6 @@ void ROSFrontEnd::initCallback(boost::shared_ptr<MsgT const> msg, const SensorId
         // This happens only for the sensors which are only for initialization.
         // The sensor which are for initialization and active will continue to listen
         if(initialized_list_[sensor_id]){
-            init_subscribers_[sensor_id].shutdown();
             // attempt to initialize the filter, because the value has changed
             // in the list
             initializeFilter();
@@ -262,9 +261,8 @@ void ROSFrontEnd::initCallback(boost::shared_ptr<MsgT const> msg, const SensorId
         // initialized modules or that the module is already initialized
         // in both cases we don't want to subscribe to this topic anymore,
         // unless there is no subscriber because we are processing a rosbag.
-        if(init_subscribers_.count(sensor_id) > 0){
-            init_subscribers_[sensor_id].shutdown();
-        }
+        // if(init_subscribers_.count(sensor_id) > 0){
+        // }
     }
 }
 
@@ -272,10 +270,10 @@ void ROSFrontEnd::initCallback(boost::shared_ptr<MsgT const> msg, const SensorId
 #define DEBUG_MODE 0
 
 template <class MsgT>
-void ROSFrontEnd::callback(boost::shared_ptr<MsgT const> msg, const SensorId& sensor_id)
+void ROSFrontEnd::callback(std::shared_ptr<MsgT const> msg, const SensorId& sensor_id)
 {
 #if DEBUG_MODE
-    ROS_INFO_STREAM("Callback for sensor " << sensor_id);
+    RCLCPP_INFO_STREAM(LOGGER, "Callback for sensor " << sensor_id);
 #endif
     // this is a generic templated callback that does the same for every module:
     // if the module is initialized and the filter is ready
@@ -291,24 +289,24 @@ void ROSFrontEnd::callback(boost::shared_ptr<MsgT const> msg, const SensorId& se
         RBISUpdateInterface* update = static_cast<SensingModule<MsgT>*>(active_modules_[sensor_id])->processMessage(msg.get(), state_est_.get());
 #if DEBUG_MODE
         auto end = std::chrono::high_resolution_clock::now();
-        ROS_INFO_STREAM("Time elapsed process message: " << std::chrono::duration_cast<std::chrono::microseconds>(end -start).count());
+        RCLCPP_INFO_STREAM(LOGGER, "Time elapsed process message: " << std::chrono::duration_cast<std::chrono::microseconds>(end -start).count());
         start = end;
 #endif
         // if the update is invalid, we leave
         if(update == nullptr){
 #if DEBUG_MODE
-            ROS_INFO_STREAM("Invalid " << sensor_id << " update" << std::endl);
+            RCLCPP_INFO_STREAM(LOGGER, "Invalid " << sensor_id << " update" << std::endl);
 #endif
             // special case for pose meas, it returns null when it does not want
             // to process data anymore
-            if(sensor_id.compare("pose_meas") == 0){
-                sensors_subscribers_["pose_meas"].shutdown();
-            }
+            // if(sensor_id.compare("pose_meas") == 0){
+            //     sensors_subscribers_["pose_meas"].shutdown();
+            // }
             return;
         }
 #if DEBUG_MODE
         if(sensor_id.compare("fovis") == 0){
-          ROS_INFO_STREAM("fovis update posterior: " << update->posterior_state.position().transpose());
+          RCLCPP_INFO_STREAM(LOGGER, "fovis update posterior: " << update->posterior_state.position().transpose());
         }
 #endif
 #define DEBUG_AICP 0
@@ -344,29 +342,26 @@ if(sensor_id.compare("scan_matcher") == 0){
 
 #if DEBUG_MODE
         end = std::chrono::high_resolution_clock::now();
-        ROS_INFO_STREAM("Time elapsed process addUpdate: " << std::chrono::duration_cast<std::chrono::microseconds>(end -start).count());
+        RCLCPP_INFO_STREAM(LOGGER, "Time elapsed process addUpdate: " << std::chrono::duration_cast<std::chrono::microseconds>(end -start).count());
         start = end;
 #endif
         if(publish_head_[sensor_id]){
             state_est_->getHeadState(head_state, head_cov);
 
             // fill in linear velocity
-            tf::vectorEigenToTF(head_state.velocity(),temp_v3);
-            tf::vector3TFToMsg(temp_v3,twist_msg_.twist.twist.linear);
+            twist_msg_.twist.twist.linear = tf2::toMsg2(head_state.velocity());
             // fill in angular velocity
-            tf::vectorEigenToTF(head_state.angularVelocity(),temp_v3);
-            tf::vector3TFToMsg(temp_v3,twist_msg_.twist.twist.angular);
+            twist_msg_.twist.twist.angular = tf2::toMsg2(head_state.angularVelocity());
 
             // fill in time
-            twist_msg_.header.stamp = ros::Time().fromNSec(head_state.utime * 1000);
+            twist_msg_.header.stamp = rclcpp::Time(head_state.utime * 1000);
 
             // TODO insert appropriate covariance into the message
 
             // set twist covariance to zero
-            twist_msg_.twist.covariance.assign(0);
-
-            Eigen::Block<RBIM, 3, 3> vel_cov = head_cov.block<3,3>(RBIS::velocity_ind,RBIS::velocity_ind);
-            Eigen::Block<RBIM, 3, 3> omega_cov = head_cov.block<3,3>(RBIS::angular_velocity_ind,RBIS::angular_velocity_ind);
+            // std::fill(twist_msg_.twist.covariance, twist_msg_.twist.covariance+twist_msg_.twist.covariance.size(), 0)
+            Eigen::Block<RBIM, 3, 3> vel_cov = head_cov.block<3,3>(RBIS::velocity_ind, RBIS::velocity_ind);
+            Eigen::Block<RBIM, 3, 3> omega_cov = head_cov.block<3,3>(RBIS::angular_velocity_ind, RBIS::angular_velocity_ind);
 
             for(int i=0; i<3; i++){
               for(int j=0; j<3; j++){
@@ -377,56 +372,57 @@ if(sensor_id.compare("scan_matcher") == 0){
 
 
             // publish the twist
-            twist_pub_.publish(twist_msg_);
+            twist_pub_->publish(twist_msg_);
 
             // make sure stuff is non-NAN before publishing
             assert(head_state.position().allFinite());
 
             // fill in message position
-            tf::vectorEigenToTF(head_state.position(), temp_v3);
-            tf::pointTFToMsg(temp_v3, pose_msg_.pose.pose.position);
+            geometry_msgs::msg::Vector3 temp_gv3 = tf2::toMsg2(head_state.position());
+            pose_msg_.pose.pose.position.x = temp_gv3.x;
+            pose_msg_.pose.pose.position.y = temp_gv3.y;
+            pose_msg_.pose.pose.position.z = temp_gv3.z;
 
             // fill in message orientation
-            tf::quaternionEigenToTF(head_state.orientation(), temp_q);
-            tf::quaternionTFToMsg(temp_q,pose_msg_.pose.pose.orientation);
+            pose_msg_.pose.pose.orientation = tf2::toMsg(head_state.orientation());
 
             // fill in time
-            pose_msg_.header.stamp = ros::Time().fromNSec(head_state.utime * 1000);
+            pose_msg_.header.stamp = rclcpp::Time(head_state.utime * 1000);
             if(publish_tf_){
                 // Only publish the pose if the timestamp is different:
                 // This prevents issues in Noetic where repeated warnings of type:
                 // "TF_REPEATED_DATA ignoring data with redundant timestamp for frame base at time"
                 // are otherwise printed to the terminal.
                 // Cf. https://github.com/ros/geometry2/issues/467#issuecomment-751572836
-                ros::Time new_stamp = pose_msg_.header.stamp;
+                rclcpp::Time new_stamp = pose_msg_.header.stamp;
                 if (new_stamp > transform_msg_.header.stamp) {
                     transform_msg_.transform.translation.x = pose_msg_.pose.pose.position.x;
                     transform_msg_.transform.translation.y = pose_msg_.pose.pose.position.y;
                     transform_msg_.transform.translation.z = pose_msg_.pose.pose.position.z;
                     transform_msg_.transform.rotation = pose_msg_.pose.pose.orientation;
                     transform_msg_.header.stamp = new_stamp;
-                    tf2_broadcaster_.sendTransform(transform_msg_);
+                    tf2_broadcaster_->sendTransform(transform_msg_);
                 }
             }
 
             // TODO insert appropriate covariance into the message
             // publish the pose
-            pose_pub_.publish(pose_msg_);
+            pose_pub_->publish(pose_msg_);
         }
 #if DEBUG_MODE
         else {
-            ROS_WARN("NOT Publish head sensor ID");
+            RCLCPP_WARN(LOGGER, "NOT Publish head sensor ID");
         }
         end = std::chrono::high_resolution_clock::now();
 
-        ROS_INFO_STREAM("Time elapsed till the end: " << std::chrono::duration_cast<std::chrono::microseconds>(end -start).count());
+        RCLCPP_INFO_STREAM(LOGGER, "Time elapsed till the end: " << std::chrono::duration_cast<std::chrono::microseconds>(end -start).count());
         std::cout << std::endl;
 #endif
     }
 }
 
 template <class PrimaryMsgT, class SecondaryMsgT>
-void ROSFrontEnd::secondaryCallback(boost::shared_ptr<SecondaryMsgT const> msg,
+void ROSFrontEnd::secondaryCallback(std::shared_ptr<SecondaryMsgT const> msg,
                                     const SensorId& sensor_id)
 {    
     auto a = dynamic_cast<DualSensingModule<PrimaryMsgT,SecondaryMsgT>*>(static_cast<SensingModule<PrimaryMsgT>*>(active_modules_[sensor_id]));
