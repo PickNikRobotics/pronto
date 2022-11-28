@@ -1,4 +1,6 @@
 #include "pronto_quadruped_ros/conversions.hpp"
+
+#include <iterator>
 #include "rclcpp/rclcpp.hpp"
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("pronto_quadruper_ros_conversions");
@@ -13,27 +15,22 @@ bool jointStateFromROS(const sensor_msgs::msg::JointState& msg,
                        JointState& qdd,
                        JointState& tau)
 {
-    // if the size of the joint state message does not match our own,
-    // we silently return an invalid update
-    if (static_cast<int>(static_cast<const sensor_msgs::msg::JointState&>(msg).position.size()) != q.size() ||
-        static_cast<int>(static_cast<const sensor_msgs::msg::JointState&>(msg).velocity.size()) != q.size() ||
-        static_cast<int>(static_cast<const sensor_msgs::msg::JointState&>(msg).effort.size()) != q.size()){
-        RCLCPP_WARN_STREAM(LOGGER, "Joint State is expected " << \
-                                 q.size() << " joints but "\
-                                 << msg.position.size() << " / " << msg.velocity.size() << " / " << msg.effort.size()
-                                 << " are provided.");
-        return false;
-    }
     // store message time in microseconds
     utime = msg.header.stamp.sec * 1e6 + msg.header.stamp.nanosec / 1000;
-    for(int i=0; i<12; i++){
-      q(i) = msg.position[i];
-      qd(i) = msg.velocity[i];
-      tau(i) = msg.effort[i];
+
+    for (int i = 0; i < orderedJointNames.size(); i++) {
+      const auto& joint_name = orderedJointNames[i];
+      auto it = std::find(msg.name.begin(), msg.name.end(), joint_name);
+      if (it == msg.name.end()) {
+        RCLCPP_WARN_STREAM(LOGGER, "Joint State expected to contain " << joint_name);
+        return false;
+      }
+
+      int pos = std::distance(msg.name.begin(), it);
+      q(i) = msg.position[pos];
+      qd(i) = msg.velocity[pos];
+      tau(i) = msg.effort[pos];
     }
-    //q = Eigen::Map<const JointState>(msg.position.data());
-    //qd = Eigen::Map<const JointState>(msg.velocity.data());
-    //tau = Eigen::Map<const JointState>(msg.effort.data());
 
     qdd.setZero(); // TODO compute the acceleration
 
@@ -47,26 +44,25 @@ bool jointStateWithAccelerationFromROS(const pronto_msgs::msg::JointStateWithAcc
                                JointState& qdd,
                                JointState& tau)
 {
-    // if the size of the joint state message does not match our own,
-    // we silently return an invalid update
-    if (static_cast<int>(static_cast<const pronto_msgs::msg::JointStateWithAcceleration&>(msg).position.size()) != q.size() ||
-        static_cast<int>(static_cast<const pronto_msgs::msg::JointStateWithAcceleration&>(msg).velocity.size()) != q.size() ||
-        static_cast<int>(static_cast<const pronto_msgs::msg::JointStateWithAcceleration&>(msg).acceleration.size()) != q.size() ||
-        static_cast<int>(static_cast<const pronto_msgs::msg::JointStateWithAcceleration&>(msg).effort.size()) != q.size()){
-        RCLCPP_WARN_STREAM(LOGGER, "Joint State is expected " << \
-                                 q.size() << " joints but "\
-                                 << msg.position.size() << " / " << msg.velocity.size() << " / " << msg.acceleration.size() << " / " << msg.effort.size()
-                                 << " are provided.");
-        return false;
-    }
     // store message time in microseconds
-    utime = msg.header.stamp.sec * 1e6 + 1e-3 * msg.header.stamp.nanosec;
-    for(int i=0; i<12; i++){
-      q(i) = msg.position[i];
-      qd(i) = msg.velocity[i];
-      qdd(i) = msg.acceleration[i];
-      tau(i) = msg.effort[i];
+    utime = msg.header.stamp.sec * 1e6 + msg.header.stamp.nanosec / 1000;
+
+    for (int i = 0; i < orderedJointNames.size(); i++) {
+      const auto& joint_name = orderedJointNames[i];
+      auto it = std::find(msg.name.begin(), msg.name.end(), joint_name);
+      if (it == msg.name.end()) {
+        RCLCPP_WARN_STREAM(LOGGER, "Joint State expected to contain " << joint_name);
+        return false;
+      }
+
+      int pos = std::distance(msg.name.begin(), it);
+      q(i) = msg.position[pos];
+      qd(i) = msg.velocity[pos];
+      qdd(i) = msg.acceleration[pos];
+      tau(i) = msg.effort[pos];
     }
+
+    qdd.setZero(); // TODO compute the acceleration
 
     return true;
 }

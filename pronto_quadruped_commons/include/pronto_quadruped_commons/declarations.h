@@ -27,6 +27,9 @@
 
 #pragma once
 
+#include <array>
+#include <string>
+
 #include <iit/rbd/rbd.h>
 
 namespace pronto {
@@ -90,6 +93,10 @@ enum LinkIdentifiers {
     , RH_UPPERLEG
     , RH_LOWERLEG
 };
+
+// We expect this to be defined in a robot-specific package, matching the
+// ordering defined by `orderedJointIDs`.
+extern const std::array<std::string, jointsCount> orderedJointNames;
 
 static const JointIdentifiers orderedJointIDs[jointsCount] =
     {LF_HAA,LF_HFE,LF_KFE,RF_HAA,RF_HFE,RF_KFE,LH_HAA,LH_HFE,LH_KFE,RH_HAA,RH_HFE,RH_KFE};

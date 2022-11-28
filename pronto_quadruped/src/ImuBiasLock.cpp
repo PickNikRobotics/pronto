@@ -21,6 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include "pronto_quadruped/ImuBiasLock.hpp"
+#include <pronto_quadruped_commons/declarations.h>
 #include <pronto_core/rotations.hpp>
 #include <pronto_core/rigidbody.hpp>  // for g_val
 #include <iostream>
@@ -144,27 +145,27 @@ bool ImuBiasLock::isStatic(const pronto::JointState &state)
   }
 
   // TODO: The knee joint order is hard-coded here!
-  if(std::abs(state.joint_effort[2]) < torque_threshold_){
-    if (debug_) std::cout << "++++++++++++++ [LF] not enough torque " << std::abs(state.joint_effort[2]) << " < " << torque_threshold_ << "\n";
+  if(std::abs(state.joint_effort.at(LF_KFE)) < torque_threshold_){
+    if (debug_) std::cerr << "++++++++++++++ [LF] not enough torque " << std::abs(state.joint_effort[LF_KFE]) << " < " << torque_threshold_ << "\n";
     return false;
   }
-  if(std::abs(state.joint_effort[5]) < torque_threshold_){
-    if (debug_) std::cout << "++++++++++++++ [RF] not enough torque " << std::abs(state.joint_effort[5]) << " < " << torque_threshold_ << "\n";
+  if(std::abs(state.joint_effort.at(RF_KFE)) < torque_threshold_){
+    if (debug_) std::cerr << "++++++++++++++ [RF] not enough torque " << std::abs(state.joint_effort[RF_KFE]) << " < " << torque_threshold_ << "\n";
     return false;
   }
-  if(std::abs(state.joint_effort[8]) < torque_threshold_){
-    if (debug_) std::cout << "++++++++++++++ [LH] not enough torque " << std::abs(state.joint_effort[8]) << " < " << torque_threshold_ << "\n";
+  if(std::abs(state.joint_effort.at(LH_KFE)) < torque_threshold_){
+    if (debug_) std::cerr << "++++++++++++++ [LH] not enough torque " << std::abs(state.joint_effort[LH_KFE]) << " < " << torque_threshold_ << "\n";
     return false;
   }
-  if(std::abs(state.joint_effort[11]) < torque_threshold_){
-    if (debug_) std::cout << "++++++++++++++ [RH] not enough torque " << std::abs(state.joint_effort[11]) << " < " << torque_threshold_ << "\n";
+  if(std::abs(state.joint_effort.at(RH_KFE)) < torque_threshold_){
+    if (debug_) std::cerr << "++++++++++++++ [RH] not enough torque " << std::abs(state.joint_effort[RH_KFE]) << " < " << torque_threshold_ << "\n";
     return false;
   }
 
   // check that joint velocities are not bigger than eps
   for (auto el : state.joint_velocity){
     if (std::abs(el) > eps_){
-      if (debug_) std::cout << "++++++++++++++ too much velocity " << std::abs(el) << " > " << eps_ << "\n";
+      if (debug_) std::cerr << "++++++++++++++ too much velocity " << std::abs(el) << " > " << eps_ << "\n";
       return false;
     }
   }
