@@ -164,8 +164,24 @@ bool LegOdometer::estimateVelocity(const uint64_t utime,
     // Recording foot position and base velocity from legs
     foot_pos_ = forward_kinematics_.getFeetPos(q);
     for(int leg = LF; leg <= RH; leg++){
+        Eigen::VectorXd qd_leg(3);
+        switch (leg) {
+          case LF:
+            qd_leg << qd[LF_HAA], qd[LF_HFE], qd[LF_KFE];
+            break;
+          case RF:
+            qd_leg << qd[RF_HAA], qd[RF_HFE], qd[RF_KFE];
+            break;
+          case LH:
+            qd_leg << qd[LH_HAA], qd[LH_HFE], qd[LH_KFE];
+            break;
+          case RH:
+            qd_leg << qd[RH_HAA], qd[RH_HFE], qd[RH_KFE];
+            break;
+        }
+
         base_vel_leg_[LegID(leg)] = - feet_jacobians_.getFootJacobian(q, LegID(leg))
-                            * qd.block<3,1>(leg * 3, 0)
+                            * qd_leg
                             - omega.cross(foot_pos_[LegID(leg)]);
     }
 
