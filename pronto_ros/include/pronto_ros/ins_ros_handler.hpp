@@ -4,6 +4,7 @@
 #include <sensor_msgs/msg/imu.hpp>
 #include <pronto_core/ins_module.hpp>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
 
 namespace pronto {
 class InsHandlerROS : public SensingModule<sensor_msgs::msg::Imu> {

@@ -85,7 +85,7 @@ RBISUpdateInterface * LidarOdometryHandlerROS::processMessage(const pronto_msgs:
 {
 
   pronto_msgs::msg::LidarOdometryUpdate mymsg = *msg;
-  builtin_interfaces::msg::Duration msg_time_offset = rclcpp::Duration(utime_offset_ * 1e3);
+  builtin_interfaces::msg::Duration msg_time_offset = rclcpp::Duration::from_seconds(utime_offset_ * 1e6);
   if( (msg->curr_timestamp.sec + msg->curr_timestamp.nanosec / 1e9)  < (msg->prev_timestamp.sec + msg->prev_timestamp.nanosec / 1e9)){
     RCLCPP_ERROR(node_->get_logger(), "[LidarOdometryHandlerROS] curr_timestamp is less than prev_timestamp! Ignoring message.");
     return nullptr;

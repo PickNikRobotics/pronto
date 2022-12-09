@@ -1,5 +1,5 @@
 #include "pronto_ros/ins_ros_handler.hpp"
-#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_eigen/tf2_eigen.hpp>
 
 #include "pronto_ros/pronto_ros_conversions.hpp"
 
