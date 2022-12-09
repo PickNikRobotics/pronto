@@ -77,7 +77,7 @@ RBISUpdateInterface * VisualOdometryHandlerROS::processMessage(const pronto_msgs
 {
 
   pronto_msgs::msg::VisualOdometryUpdate mymsg = *msg;
-  builtin_interfaces::msg::Duration msg_time_offset = rclcpp::Duration(utime_offset_ * 1e3);
+  builtin_interfaces::msg::Duration msg_time_offset = rclcpp::Duration::from_seconds(utime_offset_ * 1e6);
   try {
     mymsg.header.stamp.nanosec = msg->header.stamp.nanosec + msg_time_offset.nanosec;
     mymsg.header.stamp.sec = msg->header.stamp.sec + msg_time_offset.sec;
